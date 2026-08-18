@@ -1,0 +1,10 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+optimizer = true
+optimizer_runs = 200
+fork_block_number = 25000000 # Fixed fork block number for deterministic builds
+
+[rpc_endpoints]
+mainnet = "${MAINNET_RPC}"
