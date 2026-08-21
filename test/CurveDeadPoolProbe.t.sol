@@ -61,6 +61,7 @@ contract CurveDeadPoolProbe is Test {
         uint256 lpSupply = IERC20(LP_TOKEN).totalSupply();
         uint256 physicalWeth = IERC20(WETH).balanceOf(POOL);
         uint256 physicalCrv = IERC20(CRV).balanceOf(POOL);
+        uint256 physicalEth = POOL.balance; 
 
         uint256 d = pool.D();
         uint256 ps = pool.price_scale();
@@ -69,6 +70,7 @@ contract CurveDeadPoolProbe is Test {
         console2.log("balance[WETH] (accounting state)  :", balanceWeth);
         console2.log("balance[CRV]  (accounting state)  :", balanceCrv);
         console2.log("WETH (actual balance)             :", physicalWeth);
+        console2.log("ETH  (actual native balance)      :", physicalEth);
         console2.log("CRV  (actual balance)             :", physicalCrv);
         console2.log("D()                               :", d);
         console2.log("price_scale()                     :", ps);
@@ -81,13 +83,15 @@ contract CurveDeadPoolProbe is Test {
         if (balanceWeth > 0) {
             console2.log("ratio xp[CRV]/xp[WETH]        :", xp1 / balanceWeth);
         }
-
+        
+        assertApproxEqAbs(balanceWeth, physicalEth, 1e12, "accounting ETH should match native ETH");    // The ETH value lives natively, not in the WETH token: accounting balances(0)
+        assertLt(physicalWeth, 1e12, "physical WETH should be dust, not the real value");               // matches POOL.balance, while the physical WETH token is dust.
         assertGt(balanceCrv, physicalCrv * 100_000, ">>> Accounting CRV balance is corrupted.");
     }
 
     /// @notice Maps the convergence boundary for single-coin withdrawal of WETH from the pool.
     /// @dev    It's a view call, so no LP token is required. As the pool is corrupted, the function
-    ///         may revert if a large ammount of LP is burned.
+    ///         may revert if a large amount of LP is burned.
     function test_mapWithdrawBoundary() public view {
         console2.log("=== calc_withdraw_one_coin(size LP -> WETH) boundary ===");
         uint256[8] memory sizes = [uint256(1e18), 2e18, 3e18, 4e18, 5e18, 10e18, 100e18, 1000e18];

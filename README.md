@@ -4,7 +4,7 @@ Reproducible forensic analysis of whether the Curve CRV/ETH pool, drained in the
 
 ## Overview
 
-In 2023 the Curve ETH/CRV pool was drained due to a reentrancy attack caused by a miscompiled Vyper `@nonreentrant` guard bug. This caused an almost full drain of the pool leaving only ~ 33.38 ETH and ~ 0.019 CRV. Due to the contract immutability the bug is still alive so these tests reach the same conclusion: those funds are frozen behind several barriers. *See [WRITEUP.md](./WRITEUP.md) for the full analysis*.
+In 2023 the Curve ETH/CRV pool was drained due to a reentrancy attack caused by a miscompiled Vyper `@nonreentrant` guard bug. This caused an almost full drain of the pool leaving only ~33.38 ETH and ~0.019 CRV. Due to the contract's immutability the bug is still live, so these tests reproduce a similar exploit path and reach the same conclusion: those funds are frozen behind several barriers. *See [WRITEUP.md](./WRITEUP.md) for the full analysis*.
 
 All the work is educational and runs on read-only local forks without modifying the real mainnet.
 
