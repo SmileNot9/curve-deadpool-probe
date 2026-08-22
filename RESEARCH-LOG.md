@@ -113,11 +113,9 @@ These bugs show how important it is to make sure that you understand your code a
 
 **Conclusion:** reentry fires (`@nonreentrant` still broken) and the reentrant `add_liquidity` computes ~6,205 LP, but `remove_liquidity_one_coin` returns `[Revert] Loss` when consolidating the price so the whole transaction reverts and the attacker is left with nothing — 0 LP, 0 ETH.
 
-**Lesson:** low-level calls that don't check success silently swallow reverts and let you measure fake states that never persisted. It was the switch to typed calls that exposed the truth.
+**Lesson:** low-level calls that don't check success silently swallow reverts and let you measure fake states that never persisted. It was the switch to typed calls that exposed the truth.  
 
-**Hypothesis:** do a massive flash loan (especially CRV) to deposit into the pool and to wipe the possibility of revert when using `remove_liquidity`. Then do the over-mint, extract my own deposited assets and those ~33 ETH and finally pay back the flash loan with ~33 ETH as profit.
-
-**Where this led:** the reentrancy vector isn't viable; no transaction persists. That sent me back to the flash loan idea in [Phase 0](#phase-0--pool-discovery-and-the-initial-question) but refined. Instead of using the flash loan to replicate the 2023 attack, what if I used a massive flash loan (especially CRV) to deposit into the pool and to wipe the possibility of revert when using `remove_liquidity` (the function with the real over-mint window)?. Then do the over-mint, extract my own deposited assets and those ~33 ETH and finally pay back the flash loan with ~33 ETH as profit.
+**Where this led:** the reentrancy vector isn't viable; no transaction persists. That sent me back to the flash loan idea in [Phase 0](#phase-0--pool-discovery-and-the-initial-question) but refined. Instead of using the flash loan to replicate the 2023 attack, what if I used a massive flash loan (especially CRV) to deposit into the pool and to wipe the possibility of revert when using `remove_liquidity` (the function with the real over-mint window). Then do the over-mint, extract my own deposited assets and those ~33 ETH and finally pay back the flash loan with ~33 ETH as profit.
 
 
 ## Phase 5 — Massive flash-loan attack
