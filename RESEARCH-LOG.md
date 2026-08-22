@@ -25,11 +25,11 @@ The first thing was to verify the actual state of the pool. The results surprise
 ## Phase 1 — Etherscan inspection
 
 Three functions caught my interest: `calc_withdraw_one_coin`, `calc_token_amount` and `get_dy`.
-*Note*: All these functions in the "Read Contract" section are fully view and do not always match the results obtained with the ones that actually modify the state of the pool.
+*Note*: All these functions in the "[Read Contract](https://etherscan.io/address/0x8301ae4fc9c624d1d396cbdaa1ed877821d7c511#readContract)" section are fully view and do not always match the results obtained with the ones that actually modify the state of the pool.
 
 * `calc_withdraw_one_coin(uint256 token_amount, uint256 i)`: this function simulates burning `token_amount` LP to withdraw `coins(i)`. Toward ETH the view returned dust for small sizes and reverted at 4 LP. Toward CRV it did NOT revert, in fact, it returned huge values (~14,379 CRV for 2 LP).  
   
-  At first this might seem odd as there is no way the pool can give you that amount of CRV when the pool is almost empty of CRV, but it makes sense: the view computes the withdrawal from the corrupted internal accounting (the ~1.54 billion phantom CRV), not the ~0.019 physical CRV. So the view 'works' toward CRV only because it trusts the ghost balance; a real remove_liquidity_one_coin toward CRV would revert against the physical shortage (as Phase 4 later confirms).
+  At first this might seem odd as there is no way the pool can give you that amount of CRV when the pool is almost empty of CRV, but it makes sense: the view computes the withdrawal from the corrupted internal accounting (the ~1.54 billion phantom CRV), not the ~0.019 physical CRV. So the view 'works' toward CRV only because it trusts the ghost balance; a real remove_liquidity_one_coin toward CRV would revert against the physical shortage (as [Phase 4](#phase-4--reentrancy-over-mint-curvereentrancyoverminttsol) later confirms).
   
   >calc_withdraw_one_coin(2000000000000000000, 0) = ~0.000315 ETH  
   >calc_withdraw_one_coin(4000000000000000000, 0) = Error: Returned error: execution reverted  
@@ -70,9 +70,9 @@ This test logs:
 
 ## Phase 3 — Honest baseline: `CurveNativeEthBaseline.t.sol`
 
-This is the baseline the reentrancy attack in Phase 4 is measured against: if the attack can't beat this, there's no exploit. The test simulates an honest user calling `add_liquidity` and `remove_liquidity_one_coin` (as `remove_liquidity` would revert due to the phantom CRV).  
+This is the baseline the reentrancy attack in [Phase 4](#phase-4--reentrancy-over-mint-curvereentrancyoverminttsol) is measured against: if the attack can't beat this, there's no exploit. The test simulates an honest user calling `add_liquidity` and `remove_liquidity_one_coin` (as `remove_liquidity` would revert due to the phantom CRV).  
 
-The resulting data from the deposit confirmed the ~6,273 LP obtained in the `calc_token_amount` view function (in the Phase 1) using the same inputs (1 ETH + 1 CRV). Calling `remove_liquidity_one_coin` towards ETH successfully extracted ~0.995 ETH (the missing ~0.0047 ETH were fees) out of the 1 ETH deposited, over 3,136 iterations.
+The resulting data from the deposit confirmed the ~6,273 LP obtained in the `calc_token_amount` view function (in the [Phase 1](#phase-1--etherscan-inspection)) using the same inputs (1 ETH + 1 CRV). Calling `remove_liquidity_one_coin` towards ETH successfully extracted ~0.995 ETH (the missing ~0.0047 ETH were fees) out of the 1 ETH deposited, over 3,136 iterations.
 
 > add_liquidity{value: 1000000000000000000}([1000000000000000000, 1000000000000000000]) = ~6,273 LP  
 > remove_liquidity_one_coin(2e18, 0, 0, true) x3,136                                    = ~0.995 ETH  
@@ -84,7 +84,7 @@ The resulting data from the deposit confirmed the ~6,273 LP obtained in the `cal
 
 ## Phase 4 — Reentrancy over-mint: `CurveReentrancyOvermint.t.sol`
 
-Through this test the target was to reproduce the over-mint attack and compare it against the ~6,273 LP (obtained in the Phase 3) to see if the over-mint is still possible.
+Through this test the target was to reproduce the over-mint attack and compare it against the ~6,273 LP (obtained in the [Phase 3](#phase-3--honest-baseline-curvenativeethbaselinetsol)) to see if the over-mint is still possible.
 
 ### First attempt: `remove_liquidity` and the switch to `remove_liquidity_one_coin`
 
@@ -115,6 +115,74 @@ These bugs show how important it is to make sure that you understand your code a
 
 **Lesson:** low-level calls that don't check success silently swallow reverts and let you measure fake states that never persisted. It was the switch to typed calls that exposed the truth.
 
-**Hypothesis:** 
+**Hypothesis:** do a massive flash loan (especially CRV) to deposit into the pool and to wipe the possibility of revert when using `remove_liquidity`. Then do the over-mint, extract my own deposited assets and those ~33 ETH and finally pay back the flash loan with ~33 ETH as profit.
 
-**Where this led:** 
+**Where this led:** the reentrancy vector isn't viable; no transaction persists. That sent me back to the flash loan idea in [Phase 0](#phase-0--pool-discovery-and-the-initial-question) but refined. Instead of using the flash loan to replicate the 2023 attack, what if I used a massive flash loan (especially CRV) to deposit into the pool and to wipe the possibility of revert when using `remove_liquidity` (the function with the real over-mint window)?. Then do the over-mint, extract my own deposited assets and those ~33 ETH and finally pay back the flash loan with ~33 ETH as profit.
+
+
+## Phase 5 — Massive flash-loan attack
+
+*Unlike the previous phases, I did not test this one on-chain — I ruled it out by economic reasoning.*  
+
+Everything has to happen in the same transaction — deposit, over-mint, extract and repay. For the idea to work, an enormous amount of CRV is needed to restore the CRV side. Even with that, the pool charges a withdrawal fee proportional to that amount. So knowing that, the main issue is that the withdrawal fee on such a large amount would exceed the ~33 ETH reward available to repay the loan. The flash loan is not profitable in this case. 
+
+**Hypothesis:** as the flash loan idea was invalidated too the last option I had was to synchronize causing the accounting and physical match so technically `remove_liquidity` would run without reverting, reopening the exact 2023 attack vector — deposit, reenter though the ETH raw_call before `self.D` updates, draining ETH on each iteration. The whole plan hinges on one precondition — being able to sync the pool at all.
+
+**Where this led:** look for a public function that could resync the internal accounting to the physical balances — the precondition for the entire attack.
+
+
+## Phase 6 — The gulp: `CurveGulpSync.t.sol`
+
+I had to make sure some sync function existed and I was able to execute it. After searching for it in Etherscan section "[Write Contract](https://etherscan.io/address/0x8301ae4fc9c624d1d396cbdaa1ed877821d7c511#writeContract)", `claim_admin_fees` caught my attention which calls `_claim_admin_fees`. The important part is in the last one which contains:
+
+```python
+# Gulp here
+    _coins: address[N_COINS] = coins
+    for i in range(N_COINS):
+        if i == ETH_INDEX:
+            self.balances[i] = self.balance
+        else:
+            self.balances[i] = ERC20(_coins[i]).balanceOf(self)
+
+    vprice: uint256 = self.virtual_price
+```  
+
+This for loop syncs both coins overwriting the corrupted accounting `self.balances` with the physical balances fixing the broken state.  
+The issue comes after that part:
+
+```python
+# Recalculate D b/c we gulped
+    D: uint256 = self.newton_D(A_gamma[0], A_gamma[1], self.xp())
+    self.D = D
+
+    self.virtual_price = 10**18 * self.get_xcp(D) / total_supply
+```  
+
+After synchronizing the balances it recalculates `D` (invariant) and `virtual_price` due to the balance updates — and that's the wall.  
+`newton_D` and `virtual_price` updates using the new balances but `total_supply` is still inflated (425,042 LP inherited from the exploit). A little `D` vs a big `total_supply` produces a `virtual_price` that plummets resulting in a revert (probably due to an underflow or an inconsistent division in `newton_D/get_xcp`).
+Anyway, that trace got pretty far, read balances, minted fees, emitted `ClaimAdminFee` but reverted in the consolidation with a revert with no message.
+
+> balances[CRV] before   = ~1.54 billion (accounting) vs ~0.019 (physical)  
+> claim_admin_fees()     = bare EvmError: Revert (no message, unlike the revert "Loss" at [Phase 4](#phase-4--reentrancy-over-mint-curvereentrancyoverminttsol))  
+> balances[CRV] after    = ~1.54 billion (unchanged — the revert undid the gulp)  
+
+**Conclusion:** since the gulp reverts, the pool cannot be synced. This closes the precondition of the whole [Phase 5](#phase-5--massive-flash-loan-attack) attack. Without it, `remove_liquidity` will keep reverting as long as the phantom CRV is not updated, keeping the reentrancy vector closed. The corrupted state of the pool is not just unexploitable, it's unrepairable.
+
+
+## Closing — a self-sealed pool
+
+Each path that I tried crashed at a wall, each one independent of the others. The only similarity is that all four of them are direct consequences of the 2023 exploit which froze those funds against any reentrancy or similar attack:
+
+1. **Corrupted accounting state:** first finding in [Phase 2](#phase-2--first-test-curvedeadpoolprobetsol). The CRV side keeps a corrupted state: ~1.54 billion CRV (accounting state) vs ~0.019 CRV (physical state).  
+2. **Honest extraction is capped:** second finding in [Phase 3](#phase-3--honest-baseline-curvenativeethbaselinetsol). An honest deposit-and-withdrawal can recover at most its own deposit minus fees, so no profit.  
+3. **The reentrancy reverts:** third finding in [Phase 4](#phase-4--reentrancy-over-mint-curvereentrancyoverminttsol). Reentrancy still fires, but after switching from low-level calls to typed calls it exposed that the full sequence reverts with Curve's `Loss` guard so no state persists.
+4. **Unrepairable state:** fourth finding in [Phase 6](#phase-6--the-gulp-curvegulpsynctsol). Due to the corrupted state of the pool it cannot be gulped or synced (via `claim_admin_fees`), maintaining its broken state.  
+   
+**Final lesson:** all the investigation came to a simple idea — *a live bug is not the same as a profitable bug*. The miscompiled `@nonreentrant` guard is still broken, but has nothing to do when the pool state post-exploit is just so broken that disables functions like `remove_liquidity` and `_claim_admin_fees` making it unexploitable and unrepairable.
+
+**Reflection:** as my first investigation I learned a lot about real production contracts and their implications, I'm still a student (almost junior :)) so this was a very hard personal test and I'm very proud of the results. Maybe the last thing I would have liked to check was the flash loan idea in [Phase 5](#phase-5--massive-flash-loan-attack) but I'll leave that for the future. Thanks for taking your time to read about my investigation :).  
+
+*All measurements were taken on read-only mainnet forks pinned to block 25000000, so every number in this log is deterministic and reproducible. For the final, structured findings, see [WRITEUP.md](./WRITEUP.md)*
+
+
+***:):***
