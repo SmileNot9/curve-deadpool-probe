@@ -4,8 +4,7 @@ This is a chronological log of my investigation into whether the ~33 ETH left in
 
 Unlike the [WRITEUP.md](./WRITEUP.md), which presents the final conclusions in a cleaner way, this research log lays out the whole investigation in a chronological way split into 7 phases where I tell what I was doing, what I measured, what I concluded, and where that led next. It also documents the hypotheses, mistakes, corrections and doubts along the way. I kept all the track of good and bad turns on purpose; they are part of how the conclusions were reached, and they show the reasoning, not just the result.
 
-All tests were done on read-only mainnet forks without modifying the real state of the pool. For deterministic, reproducible results the tests are pinned to block 25000000.
-
+All tests were done on read-only mainnet forks without modifying the real state of the pool.  
 *For the final, structured findings, see [WRITEUP.md](./WRITEUP.md).*
 
 ## Phase 0 — Pool discovery and the initial question
