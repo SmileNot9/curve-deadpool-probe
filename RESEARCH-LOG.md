@@ -46,7 +46,7 @@ Three functions caught my interest: `calc_withdraw_one_coin`, `calc_token_amount
 **Where this led:** after verifying that the pool isn't frozen or broken, at least through Etherscan, I wanted to do a real test with real tools and compare the results.
 
 
-## Phase 2 — First test: `[CurveDeadPoolProbe.t.sol](./test/CurveDeadPoolProbe.t.sol)`
+## Phase 2 — First test: [`CurveDeadPoolProbe.t.sol`](./test/CurveDeadPoolProbe.t.sol)
 
 To see which strategy to follow I decided to make a test to confirm the state of the pool using the state-changing functions behind the view function I used before to get stronger confirmation of that data.  
 This test logs:
@@ -67,7 +67,7 @@ This test logs:
 **Where this led:** this confirmed the state of the pool and its balances. Now it was time to test if it was possible to do a real deposit and withdrawal on a local fork.
 
 
-## Phase 3 — Honest baseline: `[CurveNativeEthBaseline.t.sol](./test/CurveNativeEthBaseline.t.sol)`
+## Phase 3 — Honest baseline: [`CurveNativeEthBaseline.t.sol`](./test/CurveNativeEthBaseline.t.sol)
 
 This is the baseline the reentrancy attack in [Phase 4](#phase-4--reentrancy-over-mint-curvereentrancyoverminttsol) is measured against: if the attack can't beat this, there's no exploit. The test simulates an honest user calling `add_liquidity` and `remove_liquidity_one_coin` (as `remove_liquidity` would revert due to the phantom CRV).  
 
@@ -81,7 +81,7 @@ The resulting data from the deposit confirmed the ~6,273 LP obtained in the `cal
 **Where this led:** deposits and withdrawals towards ETH are possible so the next step was to test whether a reentrancy attack could mint more LP than this honest baseline — the 2023 over-mint vector.
 
 
-## Phase 4 — Reentrancy over-mint: `[CurveReentrancyOvermint.t.sol](./test/CurveReentrancyOvermint.t.sol)`
+## Phase 4 — Reentrancy over-mint: [`CurveReentrancyOvermint.t.sol`](./test/CurveReentrancyOvermint.t.sol)
 
 Through this test the target was to reproduce the over-mint attack and compare it against the ~6,273 LP (obtained in the [Phase 3](#phase-3--honest-baseline-curvenativeethbaselinetsol)) to see if the over-mint is still possible.
 
@@ -128,7 +128,7 @@ Everything has to happen in the same transaction — deposit, over-mint, extract
 **Where this led:** look for a public function that could resync the internal accounting to the physical balances — the precondition for the entire attack.
 
 
-## Phase 6 — The gulp: `[CurveGulpSync.t.sol](./test/CurveGulpSync.t.sol)`
+## Phase 6 — The gulp: [`CurveGulpSync.t.sol`](./test/CurveGulpSync.t.sol)
 
 I had to make sure some sync function existed and I was able to execute it. After searching for it in Etherscan section "[Write Contract](https://etherscan.io/address/0x8301ae4fc9c624d1d396cbdaa1ed877821d7c511#writeContract)", `claim_admin_fees` caught my attention which calls `_claim_admin_fees`. The important part is in the last one which contains:
 
