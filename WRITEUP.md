@@ -122,17 +122,18 @@ Four barriers converge on the same conclusion: the pool is self-sealed, no illeg
 
 ## Reproducibility
 
-All findings and tests are verified by fork tests pinned at block 25000000 for deterministic results. To run them check [README](./README.md) or execute:  
+All findings are verified by fork tests pinned at block 25000000 for deterministic results. To run them check [README](./README.md) or execute:  
 
 ```bash
 export MAINNET_RPC="https://..."  
 forge test --fork-url mainnet -vvv  
 ```  
 
-For the full chronological investigation, see [RESEARCH LOG](./RESEARCH-LOG.md).    
+For the full chronological investigation, see [RESEARCH-LOG.md](./RESEARCH-LOG.md).    
 
 
 ## References
 
 - [LlamaRisk post-mortem](https://hackmd.io/@LlamaRisk/BJzSKHNjn)  
-- [Pool contract](https://etherscan.io/address/0x8301ae4fc9c624d1d396cbdaa1ed877821d7c511#readContract): 0x8301AE4fc9c624d1D396cbDAa1ed877821D7C511  
+- Pool contract: [Etherscan](https://etherscan.io/address/0x8301ae4fc9c624d1d396cbdaa1ed877821d7c511#readContract)  
+- Exploit transaction: [Etherscan](https://etherscan.io/tx/0x2e7dc8b2fb7e25fd00ed9565dcc0ad4546363171d5e00f196d48103983ae477c)  
