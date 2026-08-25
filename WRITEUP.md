@@ -16,10 +16,10 @@ The current pool state:
 | Field           | Value         |
 | --------------- | ------------- |
 | Accounting      |               |
-| └─ ETH          | ~33.38        |
+| └─ ETH          | ~33.389       |
 | └─ CRV          | ~1.54 billion |
 | Physical        |               |
-| └─ ETH          | ~33.38        |
+| └─ ETH          | ~33.389       |
 | └─ CRV          | ~0.019        |
 | Total LP supply | 425,042       |
 | D               | ~3,338.9      |
@@ -28,13 +28,13 @@ The current pool state:
 *Note: the ETH value is held natively (pool.balance); the WETH token balance is dust (~1e-7)*
 
 
-## Findings: the four walls
+## Findings: the four barriers
 
-In this investigation were found 4 independent barriers:
+This investigation found four independent barriers:
 
 ### Barrier 1 — Corrupted accounting state
 
-**Claim.** The pool's internal state is corrupted, `balances(1)` (the accounting side of CRV) claims to hold eight orders of magnitude more than physically exists. Any function that reads the corrupted side operates on false data.  
+**Claim.** The pool's internal state is corrupted: `balances(1)` (the accounting side of CRV) claims to hold eight orders of magnitude more than physically exists. Any function that reads the corrupted side operates on false data.  
 
 **Mechanism.** After the 2023 exploit the physical CRV was drained but `self.balances(1)` wasn't updated correctly. Due to that, when you check the CRV side (`balances()` for accounting & `balanceOf` for physical) both sides don't match at all — ~1.54 billion CRV (accounting) vs only ~0.019 CRV (physical). Meanwhile, the ETH side (`balances()` for accounting & `balance` for physical) does match as it wasn't corrupted by the exploit.  
 
@@ -61,21 +61,21 @@ The test asserts balances(1) > physicalCRV × 100,000, and that native ETH match
 
 > ETH deposited         = 1 ETH  
 > minted LP             = ~6,273 LP  
-> iterations completed  = 3136  
+> iterations completed  = 3,136  
 > ETH extracted         = ~0.995 ETH  
 
 *Net result: loss of ~0.0047 ETH in fees*  
 
 The test asserts `ethExtracted` < `ethDeposited` — honest extraction isn't profitable.  
 
-**Implication.** An honest user cannot obtain any profit by legitimate deposit and withdrawal. This collected data will be compared against reentrancy ([Barrier 3](#barrier-3--the-reentrancy-fire-but-reverts)) to conclude if the attack is profitable or not.  
+**Implication.** An honest user cannot obtain any profit by legitimate deposit and withdrawal. This collected data will be compared against reentrancy ([Barrier 3](#barrier-3--the-reentrancy-fires-but-reverts)) to conclude if the attack is profitable or not.  
 
 
 ### Barrier 3 — The reentrancy fires but reverts
 
-**Claim.** The 2023 reentrancy vector still fires, but cannot complete the full sequence due to the Curve's `Loss` guard which causes the revert leaving the attacker with nothing.  
+**Claim.** The 2023 reentrancy vector still fires, but cannot complete the full sequence due to Curve's `Loss` guard which causes the revert leaving the attacker with nothing.  
 
-**Mechanism.** The attacker fires `add_liquidity` to add some legitimate funds and then triggers `remove_liquidity_one_coin` toward ETH, inside that function resides a `raw_call` which delegates the flow to the attacker's `receive()` which reenters `add_liquidity`, computing a fresh LP amount mid-withdrawal. But when the outer `remove_liquidity_one_coin` finishes and consolidates the price via `tweak_price`, it fires Curve's `Loss` guard (the recomputed `virtual_price`
+**Mechanism.** The attacker fires `add_liquidity` to add some legitimate funds and then triggers `remove_liquidity_one_coin` toward ETH. Inside that function resides a `raw_call` which delegates the flow to the attacker's `receive()` which reenters `add_liquidity`, computing a fresh LP amount mid-withdrawal. But when the outer `remove_liquidity_one_coin` finishes and consolidates the price via `tweak_price`, it fires Curve's `Loss` guard (the recomputed `virtual_price`
 falls against the inflated `total_supply`) reverting the whole transaction.  
 
 **Evidence.** `test_reentrancyOvermint`, which performs a reentrancy, is in `CurveReentrancyOvermint.t.sol`. The test shows the following results:  
@@ -88,14 +88,14 @@ falls against the inflated `total_supply`) reverting the whole transaction.
 
 The reentrant deposit gets an under-mint compared to the honest one — ~6,205 LP vs ~6,273 LP — but full sequence reverts with `Loss` guard so no persistent state remains.  
 
-**Implication.** The whole sequence doesn't persist even while `@nonreentrant` is still broken and even if it computed it would produce an under-mint so no profit here.  
+**Implication.** The whole sequence doesn't persist even while `@nonreentrant` is still broken and even if it computed it would produce an under-mint, so no profit here.  
 
 
 ### Barrier 4 — Unrepairable state
 
 **Claim.** The corrupted state of the pool cannot be repaired through the contract's own mechanisms. The only function that could sync it — `claim_admin_fees`, which overrides `self.balances`, reverts at the consolidation phase.  
 
-**Mechanism.** `claim_admin_fees` calls `_claim_admin_fees`, which contains a gulp that overrides `self.balances` with the physical balances (`pool.balance` for ETH; `balanceOf` for CRV), this part succeeds. But after that gulp, the function recomputes `D` and `virtual_price` with the recomputed balances where a little amount of assets (~33 ETH & ~0.019 CRV) collides with an inflated `total_supply` (~425,042 LP) inherited from the exploit which finally reverts failing the whole sync try.  
+**Mechanism.** `claim_admin_fees` calls `_claim_admin_fees`, which contains a gulp that overrides `self.balances` with the physical balances (`pool.balance` for ETH; `balanceOf` for CRV). This part succeeds. But after that gulp, the function recomputes `D` and `virtual_price` with the recomputed balances where a little amount of assets (~33 ETH & ~0.019 CRV) collides with an inflated `total_supply` (~425,042 LP) inherited from the exploit which reverts, failing the whole sync.  
 
 **Evidence.** `test_tryGulpSync`, which tries a sync, is in `CurveGulpSync.t.sol`. The test results:  
 
@@ -105,24 +105,24 @@ The reentrant deposit gets an under-mint compared to the honest one — ~6,205 L
 
 The whole sequence reverts with a simple revert without any message (probably an underflow or an inconsistent division in `newton_D/get_xcp`). This failed state is confirmed with the assertEq which compares `balances(1)` before and after the `claim_admin_fees()`.  
 
-**Implication.** Since the pool cannot be synced it confirms the unrepairable state of the pool and its unexploitability leaving the pool with four independent barriers that prevent the extraction of those 33 ETH.
+**Implication.** Since the pool cannot be synced, it confirms the unrepairable state of the pool and its unexploitability leaving the pool with four independent barriers that prevent the extraction of those 33 ETH.
 
 
 ## Discarded path: the massive flash loan
 
 *Unlike the other paths this one wasn't tested on-chain, I just ruled it out by economic reasoning.*  
 
-The idea was simple: take a flash loan of CRV to fix the corrupted CRV side and unlock `remove_liquidity` so the 2023 reentrancy attack would work again. But the amount of CRV that would be needed does not compensate for the reward — 33 ETH — due to the withdrawal fees scales proportionally to the borrowed CRV.  
+The idea was simple: take a flash loan of CRV to fix the corrupted CRV side and unlock `remove_liquidity` so the 2023 reentrancy attack would work again. But the amount of CRV that would be needed does not compensate for the reward — 33 ETH — because the withdrawal fees scales proportionally to the borrowed CRV.  
 
 
 ## Conclusion
 
-Four barriers converge on the same conclusion: the pool is self-sealed, no illegitimate extraction is possible. The valuable lesson here is that a live bug does not always equal an exploitable bug — the `@nonreentrant` guard is still broken, but as we have just seen the consequences of the 2023 exploit resulted in an unrepairable corrupted state of the pool making those 33 ETH unextractable.  
+Four barriers converge on the same conclusion: the pool is self-sealed, no illegitimate extraction is possible. The valuable lesson here is that a live bug does not always equal an exploitable bug — the `@nonreentrant` guard is still broken, but as we have just seen, the consequences of the 2023 exploit resulted in an unrepairable corrupted state of the pool making those 33 ETH unextractable.  
 
 
 ## Reproducibility
 
-All findings are verified by fork tests pinned at block 25000000 for deterministic results. To run them check [README](./README.md) or execute:  
+All findings are verified by fork tests pinned at block 25000000 for deterministic results. To run them check [README.md](./README.md) or execute:  
 
 ```bash
 export MAINNET_RPC="https://..."  
