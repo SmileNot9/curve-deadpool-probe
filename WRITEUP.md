@@ -6,7 +6,7 @@ After the Vyper reentrancy exploit in 2023, the `@nonreentrant` guard is still b
 
 ## Background
 
-In 2023 [Curve's CRV/ETH pool](https://etherscan.io/address/0x8301ae4fc9c624d1d396cbdaa1ed877821d7c511#code) suffered an exploit draining almost the entire pool: 7,193,401.77 CRV (~$5.1m at time of exploit), 7,680.49 WETH (~$14.2m) and 2,879.65 ETH (~$5.4m). That left the pool with only ~33 ETH and ~0.019 CRV, barely dust. This exploit was caused by a Vyper compiler bug. In a nutshell, the compiler failed to assign the correct reentrancy lock slot, so the `@nonreentrant` guard didn't actually work.
+In 2023 [Curve's CRV/ETH pool](https://etherscan.io/address/0x8301ae4fc9c624d1d396cbdaa1ed877821d7c511#code) suffered an exploit draining almost the entire pool: 7,193,401.77 CRV (\~$5.1m at time of exploit), 7,680.49 WETH (\~$14.2m) and 2,879.65 ETH (\~$5.4m). That left the pool with only ~33 ETH and ~0.019 CRV, barely dust. This exploit was caused by a Vyper compiler bug. In a nutshell, the compiler failed to assign the correct reentrancy lock slot, so the `@nonreentrant` guard didn't actually work.
 
 
 ## Pool state
